@@ -18,6 +18,7 @@ ALLOWED_MODELS = {
 
 DEFAULT_SMALL = "anthropic/claude-haiku-4.5"
 DEFAULT_LARGE = "anthropic/claude-opus-4.6"
+DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_KEY", "")
 
 
 class APIError(Exception):
@@ -65,6 +66,16 @@ def call_model(api_key, model, messages, temperature=0.0, max_tokens=4000):
     return data["choices"][0]["message"]["content"]
 
 
+def get_api_key(data):
+    """Get API key from request, falling back to the default key."""
+    key = (data.get("api_key") or "").strip()
+    if key:
+        return key
+    if DEFAULT_API_KEY:
+        return DEFAULT_API_KEY
+    raise APIError("Please enter your OpenRouter API key.", 400)
+
+
 def get_model(data, key, default):
     """Get a model ID from request data, falling back to default if missing/invalid."""
     model = data.get(key, default)
@@ -93,11 +104,17 @@ def diagram():
     return send_file(os.path.join(os.path.dirname(__file__), "qa-diagram.png"), mimetype="image/png")
 
 
+@app.route("/api/has_default_key", methods=["GET"])
+def has_default_key():
+    """Check if a default API key is configured (without exposing it)."""
+    return jsonify({"available": bool(DEFAULT_API_KEY)})
+
+
 @app.route("/api/step1_opus_answer", methods=["POST"])
 def step1_opus_answer():
     """Step 1: Large model answers the question (reference answer)."""
     data = request.json
-    api_key = data["api_key"]
+    api_key = get_api_key(data)
     question = data["question"]
     large_model = get_model(data, "large_model", DEFAULT_LARGE)
 
@@ -110,7 +127,7 @@ def step1_opus_answer():
 def step2_haiku_initial():
     """Step 2: Small model answers the question (initial attempt)."""
     data = request.json
-    api_key = data["api_key"]
+    api_key = get_api_key(data)
     question = data["question"]
     small_model = get_model(data, "small_model", DEFAULT_SMALL)
 
@@ -123,7 +140,7 @@ def step2_haiku_initial():
 def judge_answer():
     """Judge whether an answer is correct by comparing to the reference."""
     data = request.json
-    api_key = data["api_key"]
+    api_key = get_api_key(data)
     question = data["question"]
     answer = data["answer"]
     reference = data["reference"]
@@ -154,7 +171,7 @@ Respond with ONLY "correct" or "incorrect" on the first line, then a brief one-s
 def step3_generate_questions():
     """Step 3: Haiku generates 10 binary questions about its answer."""
     data = request.json
-    api_key = data["api_key"]
+    api_key = get_api_key(data)
     question = data["question"]
     haiku_answer = data["haiku_answer"]
     questioner_model = get_model(data, "questioner_model", DEFAULT_SMALL)
@@ -201,7 +218,7 @@ Return ONLY the numbered list, nothing else."""
 def step4_answer_questions():
     """Step 4: Opus answers the 10 binary questions."""
     data = request.json
-    api_key = data["api_key"]
+    api_key = get_api_key(data)
     question = data["question"]
     opus_answer = data["opus_answer"]
     haiku_answer = data["haiku_answer"]
@@ -252,7 +269,7 @@ Return ONLY the numbered list of Yes/No answers, nothing else."""
 def step5_haiku_revised():
     """Step 5: Haiku revises its answer using the Q&A transcript."""
     data = request.json
-    api_key = data["api_key"]
+    api_key = get_api_key(data)
     question = data["question"]
     haiku_answer = data["haiku_answer"]
     questions = data["questions"]

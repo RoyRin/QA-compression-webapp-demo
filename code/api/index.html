@@ -166,9 +166,12 @@
     <div id="setup">
         <div class="key-row">
             <label>OpenRouter Key:</label>
-            <input type="password" id="api-key" placeholder="sk-or-v1-..." />
+            <input type="password" id="api-key" placeholder="sk-or-v1-... (optional — a demo key is provided)" />
         </div>
-        <p class="key-note">Your key is stored only in your browser's local storage. We do not store or log your API key or queries on the server &mdash; it is passed through to OpenRouter and discarded.</p>
+        <p class="key-note" id="key-note">Your key is stored only in your browser's local storage. We do not store or log your API key or queries on the server &mdash; it is passed through to OpenRouter and discarded.</p>
+        <p class="key-note" id="courtesy-note" style="display:none; color:#64748b;">
+            A courtesy demo key with a small budget is available so you can try it without signing up. Please use your own <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style="color:#2563eb;">OpenRouter key</a> for repeated use.
+        </p>
 
         <details class="model-config" id="model-config">
             <summary>Model Configuration</summary>
@@ -330,7 +333,7 @@ async function apiCall(endpoint, body) {
 async function run() {
     const apiKey = document.getElementById('api-key').value.trim();
     const question = document.getElementById('question').value.trim();
-    if (!apiKey) { showError('Please enter your OpenRouter API key'); return; }
+    if (!apiKey && !window._hasDefaultKey) { showError('Please enter your OpenRouter API key'); return; }
     if (!question) { showError('Please enter a question'); return; }
     clearError();
 
@@ -486,6 +489,15 @@ function syncQuestioner() {
 smallSel.addEventListener('change', syncQuestioner);
 linkCb.addEventListener('change', syncQuestioner);
 syncQuestioner();
+
+// Check if a default key is available
+window._hasDefaultKey = false;
+fetch('/api/has_default_key').then(r => r.json()).then(data => {
+    window._hasDefaultKey = data.available;
+    if (data.available) {
+        document.getElementById('courtesy-note').style.display = 'block';
+    }
+}).catch(() => {});
 </script>
 </body>
 </html>
