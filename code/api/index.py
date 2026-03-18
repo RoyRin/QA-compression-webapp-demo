@@ -6,10 +6,21 @@ from flask import Flask, send_file, jsonify, request
 app = Flask(__name__)
 
 # OpenRouter model IDs
-SMALL_MODEL = "anthropic/claude-haiku-4-5-20251001"
-LARGE_MODEL = "anthropic/claude-sonnet-4-5-20250929"
+SMALL_MODEL = "anthropic/claude-haiku-4.5"
+LARGE_MODEL = "anthropic/claude-opus-4.5"
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+class APIError(Exception):
+    def __init__(self, message, status_code=400):
+        self.message = message
+        self.status_code = status_code
+
+
+@app.errorhandler(APIError)
+def handle_api_error(e):
+    return jsonify({"error": e.message}), e.status_code
 
 
 def call_model(api_key, model, messages, temperature=0.0, max_tokens=4000):
@@ -24,9 +35,25 @@ def call_model(api_key, model, messages, temperature=0.0, max_tokens=4000):
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
-    r = requests.post(OPENROUTER_URL, headers=headers, json=body, timeout=120)
-    r.raise_for_status()
+    try:
+        r = requests.post(OPENROUTER_URL, headers=headers, json=body, timeout=120)
+    except requests.exceptions.Timeout:
+        raise APIError("Request timed out. Try again.", 504)
+    except requests.exceptions.ConnectionError:
+        raise APIError("Could not connect to OpenRouter.", 502)
+
+    if r.status_code == 401:
+        raise APIError("Invalid API key. Check your OpenRouter key.", 401)
+    if r.status_code == 402:
+        raise APIError("Insufficient credits on your OpenRouter account.", 402)
+    if r.status_code == 429:
+        raise APIError("Rate limited. Wait a moment and try again.", 429)
+    if not r.ok:
+        raise APIError(f"OpenRouter error ({r.status_code}): {r.text[:200]}", r.status_code)
+
     data = r.json()
+    if "choices" not in data or not data["choices"]:
+        raise APIError(f"Unexpected response from OpenRouter: {json.dumps(data)[:200]}")
     return data["choices"][0]["message"]["content"]
 
 
@@ -72,6 +99,36 @@ def step2_haiku_initial():
     messages = [{"role": "user", "content": question}]
     answer = call_model(api_key, SMALL_MODEL, messages)
     return jsonify({"answer": answer})
+
+
+@app.route("/api/judge_answer", methods=["POST"])
+def judge_answer():
+    """Judge whether an answer is correct by comparing to the reference."""
+    data = request.json
+    api_key = data["api_key"]
+    question = data["question"]
+    answer = data["answer"]
+    reference = data["reference"]
+
+    prompt = f"""Compare these two answers to the question: "{question}"
+
+Reference answer (correct):
+{reference}
+
+Answer to evaluate:
+{answer}
+
+Is the answer to evaluate essentially correct? Consider whether it reaches the same conclusion/result, even if the wording or approach differs.
+
+Respond with ONLY "correct" or "incorrect" on the first line, then a brief one-sentence explanation."""
+
+    messages = [{"role": "user", "content": prompt}]
+    resp = call_model(api_key, LARGE_MODEL, messages, max_tokens=200)
+
+    is_correct = "correct" in resp.strip().split("\n")[0].lower() and "incorrect" not in resp.strip().split("\n")[0].lower()
+    explanation = resp.strip().split("\n")[-1] if "\n" in resp.strip() else resp.strip()
+
+    return jsonify({"correct": is_correct, "explanation": explanation, "raw": resp})
 
 
 @app.route("/api/step3_generate_questions", methods=["POST"])

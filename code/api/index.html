@@ -66,6 +66,13 @@
         .error-msg { background: #450a0a; border: 1px solid #ef4444; color: #ef4444; padding: 12px 16px;
             border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
 
+        .judgment { padding: 14px 20px; border-radius: 10px; margin-bottom: 16px; display: flex;
+            align-items: center; gap: 12px; font-size: 15px; font-weight: 600; }
+        .judgment.correct { background: #14532d; border: 1px solid #22c55e; color: #22c55e; }
+        .judgment.incorrect { background: #450a0a; border: 1px solid #ef4444; color: #ef4444; }
+        .judgment-icon { font-size: 20px; }
+        .judgment-text { flex: 1; }
+
         .reset-btn { display: block; margin: 20px auto; padding: 10px 24px; border: 1px solid #2a2a4a;
             border-radius: 8px; background: transparent; color: #888; font-size: 14px; cursor: pointer; }
         .reset-btn:hover { border-color: #555; color: #ccc; }
@@ -76,7 +83,7 @@
     <h1>10 Bits: Haiku to Opus</h1>
     <p class="subtitle">
         Can a small model match a large model's answer using only 10 yes/no questions (10 bits)?<br>
-        Ask a question. Haiku attempts it, asks 10 binary questions to Sonnet, then revises.
+        Ask a question. Haiku attempts it, asks 10 binary questions to Opus, then revises.
     </p>
 
     <div style="text-align:center; margin-bottom:24px;">
@@ -101,8 +108,8 @@
         <div class="step pending grayed" id="step1">
             <div class="step-header">
                 <div class="step-num">1</div>
-                <div class="step-title">Sonnet Reference Answer</div>
-                <div class="step-model">anthropic/claude-sonnet-4-5</div>
+                <div class="step-title">Opus Reference Answer</div>
+                <div class="step-model">anthropic/claude-opus-4.5</div>
             </div>
             <div class="step-body"><pre id="step1-content">Waiting...</pre></div>
         </div>
@@ -112,9 +119,15 @@
             <div class="step-header">
                 <div class="step-num">2</div>
                 <div class="step-title">Haiku Initial Answer</div>
-                <div class="step-model">anthropic/claude-haiku-4-5</div>
+                <div class="step-model">anthropic/claude-haiku-4.5</div>
             </div>
             <div class="step-body"><pre id="step2-content">Waiting...</pre></div>
+        </div>
+
+        <!-- Judgment banner -->
+        <div class="judgment" id="judgment" style="display:none;">
+            <span class="judgment-icon" id="judgment-icon"></span>
+            <span class="judgment-text" id="judgment-text"></span>
         </div>
 
         <!-- Step 3: Questions -->
@@ -126,7 +139,7 @@
             </div>
             <div class="step-body">
                 <table class="qa-table" id="qa-table">
-                    <thead><tr><th>#</th><th>Question (Haiku)</th><th>Answer (Sonnet)</th></tr></thead>
+                    <thead><tr><th>#</th><th>Question (Haiku)</th><th>Answer (Opus)</th></tr></thead>
                     <tbody id="qa-body"></tbody>
                 </table>
             </div>
@@ -146,6 +159,12 @@
                 <div class="step-model">incorporating 10 bits</div>
             </div>
             <div class="step-body"><pre id="step4-content">Waiting...</pre></div>
+        </div>
+
+        <!-- Final judgment -->
+        <div class="judgment" id="judgment2" style="display:none;">
+            <span class="judgment-icon" id="judgment2-icon"></span>
+            <span class="judgment-text" id="judgment2-text"></span>
         </div>
 
         <button class="reset-btn" onclick="reset()">Start Over</button>
@@ -185,11 +204,12 @@ async function apiCall(endpoint, body) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body),
     });
+    const data = await resp.json().catch(() => null);
     if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`API error (${resp.status}): ${text}`);
+        const msg = data && data.error ? data.error : `Server error (${resp.status})`;
+        throw new Error(msg);
     }
-    return resp.json();
+    return data;
 }
 
 async function run() {
@@ -207,6 +227,8 @@ async function run() {
     setStep('step1', 'pending'); setStep('step2', 'pending');
     setStep('step3', 'pending'); setStep('step4', 'pending');
     document.getElementById('qa-body').innerHTML = '';
+    document.getElementById('judgment').style.display = 'none';
+    document.getElementById('judgment2').style.display = 'none';
 
     const base = { api_key: apiKey, question };
 
@@ -220,6 +242,18 @@ async function run() {
         setStep('step2', 'active');
         const r2 = await apiCall('/api/step2_haiku_initial', base);
         setStep('step2', 'done', r2.answer);
+
+        // Judge initial answer
+        const judge = await apiCall('/api/judge_answer', {
+            ...base, answer: r2.answer, reference: r1.answer,
+        });
+        const jEl = document.getElementById('judgment');
+        jEl.style.display = 'flex';
+        jEl.className = 'judgment ' + (judge.correct ? 'correct' : 'incorrect');
+        document.getElementById('judgment-icon').textContent = judge.correct ? '\u2713' : '\u2717';
+        document.getElementById('judgment-text').textContent = judge.correct
+            ? 'Haiku got it right! Let\'s see if 10 bits can still help.'
+            : 'Haiku got it wrong. Can 10 bits fix it?';
 
         // Step 3: Generate questions
         setStep('step3', 'active');
@@ -260,6 +294,26 @@ async function run() {
             ...base, haiku_answer: r2.answer, questions: r3.questions, answers: r4.answers,
         });
         setStep('step4', 'done', r5.answer);
+
+        // Judge revised answer
+        const judge2 = await apiCall('/api/judge_answer', {
+            ...base, answer: r5.answer, reference: r1.answer,
+        });
+        const j2El = document.getElementById('judgment2');
+        j2El.style.display = 'flex';
+        j2El.className = 'judgment ' + (judge2.correct ? 'correct' : 'incorrect');
+        document.getElementById('judgment2-icon').textContent = judge2.correct ? '\u2713' : '\u2717';
+        const before = judge.correct ? 'correct' : 'incorrect';
+        const after = judge2.correct ? 'correct' : 'incorrect';
+        if (!judge.correct && judge2.correct) {
+            document.getElementById('judgment2-text').textContent = '10 bits recovered the answer!';
+        } else if (judge.correct && judge2.correct) {
+            document.getElementById('judgment2-text').textContent = 'Still correct after 10 bits.';
+        } else if (judge.correct && !judge2.correct) {
+            document.getElementById('judgment2-text').textContent = 'Regression: was correct, now wrong after 10 bits.';
+        } else {
+            document.getElementById('judgment2-text').textContent = '10 bits were not enough to fix it.';
+        }
 
         // Ungray step 1 now that everything is done
         setStep('step1', 'done', r1.answer);
