@@ -248,6 +248,7 @@
         <div class="judgment" id="judgment" style="display:none;">
             <span class="judgment-icon" id="judgment-icon"></span>
             <span class="judgment-text" id="judgment-text"></span>
+            <button class="go" id="try-anyway-btn" onclick="tryAnyway()" style="display:none; padding:8px 16px; font-size:13px;">Try 10 bits anyway</button>
         </div>
 
         <!-- Step 3: Questions -->
@@ -349,6 +350,7 @@ async function run() {
     document.getElementById('qa-body').innerHTML = '';
     document.getElementById('judgment').style.display = 'none';
     document.getElementById('judgment2').style.display = 'none';
+    document.getElementById('try-anyway-btn').style.display = 'none';
 
     const smallModel = document.getElementById('small-model').value;
     const questionerModel = document.getElementById('link-questioner').checked
@@ -390,72 +392,22 @@ async function run() {
         jEl.className = 'judgment ' + (judge.correct ? 'correct' : 'incorrect');
         document.getElementById('judgment-icon').textContent = judge.correct ? '\u2713' : '\u2717';
         document.getElementById('judgment-text').textContent = judge.correct
-            ? smallLabel + ' got it right! Let\'s see if 10 bits can still help.'
+            ? smallLabel + ' got it right!'
             : smallLabel + ' got it wrong. Can 10 bits fix it?';
 
-        // Step 3: Generate questions
-        setStep('step3', 'active');
-        const r3 = await apiCall('/api/step3_generate_questions', {
-            ...base, haiku_answer: r2.answer,
-        });
+        // Store state for potential continuation
+        window._runState = { base, r1, r2, judge, smallLabel };
 
-        // Show questions (answers pending)
-        const tbody = document.getElementById('qa-body');
-        tbody.innerHTML = '';
-        for (let i = 0; i < r3.questions.length; i++) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td class="q-num">${i+1}</td><td>${r3.questions[i]}</td><td class="answer-pending">...</td>`;
-            tbody.appendChild(tr);
+        if (judge.correct) {
+            // Show "try anyway" button instead of auto-continuing
+            const tryBtn = document.getElementById('try-anyway-btn');
+            tryBtn.style.display = 'inline-block';
+            document.getElementById('go-btn').disabled = false;
+            return;
         }
 
-        // Step 3b: Answer questions
-        const r4 = await apiCall('/api/step4_answer_questions', {
-            ...base, opus_answer: r1.answer, haiku_answer: r2.answer, questions: r3.questions,
-        });
-
-        // Fill in answers
-        const rows = tbody.querySelectorAll('tr');
-        for (let i = 0; i < r4.answers.length && i < rows.length; i++) {
-            const td = rows[i].querySelector('td:last-child');
-            td.textContent = r4.answers[i] ? 'Yes' : 'No';
-            td.className = r4.answers[i] ? 'answer-yes' : 'answer-no';
-        }
-        setStep('step3', 'done');
-
-        // Bit counter
-        document.getElementById('bits-used').textContent = r3.questions.length;
-        document.getElementById('bit-counter').style.display = 'block';
-
-        // Step 4: Haiku revised
-        setStep('step4', 'active');
-        const r5 = await apiCall('/api/step5_haiku_revised', {
-            ...base, haiku_answer: r2.answer, questions: r3.questions, answers: r4.answers,
-        });
-        setStep('step4', 'done', r5.answer);
-
-        // Judge revised answer
-        const judge2 = await apiCall('/api/judge_answer', {
-            ...base, answer: r5.answer, reference: r1.answer,
-        });
-        const j2El = document.getElementById('judgment2');
-        j2El.style.display = 'flex';
-        j2El.className = 'judgment ' + (judge2.correct ? 'correct' : 'incorrect');
-        document.getElementById('judgment2-icon').textContent = judge2.correct ? '\u2713' : '\u2717';
-        const before = judge.correct ? 'correct' : 'incorrect';
-        const after = judge2.correct ? 'correct' : 'incorrect';
-        if (!judge.correct && judge2.correct) {
-            document.getElementById('judgment2-text').textContent = '10 bits recovered the answer!';
-        } else if (judge.correct && judge2.correct) {
-            document.getElementById('judgment2-text').textContent = 'Still correct after 10 bits.';
-        } else if (judge.correct && !judge2.correct) {
-            document.getElementById('judgment2-text').textContent = 'Regression: was correct, now wrong after 10 bits.';
-        } else {
-            document.getElementById('judgment2-text').textContent = '10 bits were not enough to fix it.';
-        }
-
-        // Ungray step 1 now that everything is done
-        setStep('step1', 'done', r1.answer);
-        document.getElementById('step1').classList.remove('grayed');
+        // Auto-continue if wrong
+        await runQASteps(base, r1, r2, judge, smallLabel);
 
     } catch (e) {
         showError(e.message);
@@ -464,9 +416,87 @@ async function run() {
     document.getElementById('go-btn').disabled = false;
 }
 
+async function tryAnyway() {
+    const s = window._runState;
+    if (!s) return;
+    document.getElementById('try-anyway-btn').style.display = 'none';
+    document.getElementById('go-btn').disabled = true;
+    try {
+        await runQASteps(s.base, s.r1, s.r2, s.judge, s.smallLabel);
+    } catch (e) {
+        showError(e.message);
+    }
+    document.getElementById('go-btn').disabled = false;
+}
+
+async function runQASteps(base, r1, r2, judge, smallLabel) {
+    // Step 3: Generate questions
+    setStep('step3', 'active');
+    const r3 = await apiCall('/api/step3_generate_questions', {
+        ...base, haiku_answer: r2.answer,
+    });
+
+    // Show questions (answers pending)
+    const tbody = document.getElementById('qa-body');
+    tbody.innerHTML = '';
+    for (let i = 0; i < r3.questions.length; i++) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="q-num">${i+1}</td><td>${r3.questions[i]}</td><td class="answer-pending">...</td>`;
+        tbody.appendChild(tr);
+    }
+
+    // Step 3b: Answer questions
+    const r4 = await apiCall('/api/step4_answer_questions', {
+        ...base, opus_answer: r1.answer, haiku_answer: r2.answer, questions: r3.questions,
+    });
+
+    // Fill in answers
+    const rows = tbody.querySelectorAll('tr');
+    for (let i = 0; i < r4.answers.length && i < rows.length; i++) {
+        const td = rows[i].querySelector('td:last-child');
+        td.textContent = r4.answers[i] ? 'Yes' : 'No';
+        td.className = r4.answers[i] ? 'answer-yes' : 'answer-no';
+    }
+    setStep('step3', 'done');
+
+    // Bit counter
+    document.getElementById('bits-used').textContent = r3.questions.length;
+    document.getElementById('bit-counter').style.display = 'block';
+
+    // Step 4: Haiku revised
+    setStep('step4', 'active');
+    const r5 = await apiCall('/api/step5_haiku_revised', {
+        ...base, haiku_answer: r2.answer, questions: r3.questions, answers: r4.answers,
+    });
+    setStep('step4', 'done', r5.answer);
+
+    // Judge revised answer
+    const judge2 = await apiCall('/api/judge_answer', {
+        ...base, answer: r5.answer, reference: r1.answer,
+    });
+    const j2El = document.getElementById('judgment2');
+    j2El.style.display = 'flex';
+    j2El.className = 'judgment ' + (judge2.correct ? 'correct' : 'incorrect');
+    document.getElementById('judgment2-icon').textContent = judge2.correct ? '\u2713' : '\u2717';
+    if (!judge.correct && judge2.correct) {
+        document.getElementById('judgment2-text').textContent = '10 bits recovered the answer!';
+    } else if (judge.correct && judge2.correct) {
+        document.getElementById('judgment2-text').textContent = 'Still correct after 10 bits.';
+    } else if (judge.correct && !judge2.correct) {
+        document.getElementById('judgment2-text').textContent = 'Regression: was correct, now wrong after 10 bits.';
+    } else {
+        document.getElementById('judgment2-text').textContent = '10 bits were not enough to fix it.';
+    }
+
+    // Ungray step 1 now that everything is done
+    setStep('step1', 'done', r1.answer);
+    document.getElementById('step1').classList.remove('grayed');
+}
+
 function reset() {
     document.getElementById('steps').style.display = 'none';
     document.getElementById('question').value = '';
+    document.getElementById('try-anyway-btn').style.display = 'none';
     clearError();
 }
 
