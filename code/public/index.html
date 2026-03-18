@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>10 Bits: Haiku to Opus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+        h1 { font-size: 32px; color: #fff; margin-bottom: 4px; }
+        .subtitle { color: #888; font-size: 15px; margin-bottom: 24px; line-height: 1.5; }
+
+        .setup-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+        .setup-bar input, .setup-bar textarea { flex: 1; min-width: 200px; padding: 12px; border: 1px solid #2a2a4a;
+            border-radius: 8px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; font-family: inherit; }
+        .setup-bar textarea { min-height: 60px; resize: vertical; }
+        .setup-bar input::placeholder, .setup-bar textarea::placeholder { color: #555; }
+        button.go { padding: 12px 32px; border: none; border-radius: 8px; background: #2563eb; color: #fff;
+            font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        button.go:hover { background: #1d4ed8; }
+        button.go:disabled { background: #333; cursor: not-allowed; }
+
+        .key-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+        .key-row input { flex: 1; }
+        .key-row label { color: #888; font-size: 13px; white-space: nowrap; }
+
+        /* Steps */
+        .step { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; margin-bottom: 16px;
+            overflow: hidden; transition: opacity 0.3s; }
+        .step.pending { opacity: 0.3; }
+        .step.active { opacity: 1; border-color: #2563eb; }
+        .step.done { opacity: 1; }
+        .step.grayed .step-body { opacity: 0.4; }
+
+        .step-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #2a2a4a; }
+        .step-num { background: #2563eb; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+        .step.done .step-num { background: #22c55e; }
+        .step.grayed .step-num { background: #555; }
+        .step-title { font-size: 15px; font-weight: 600; color: #fff; }
+        .step-model { font-size: 12px; color: #888; margin-left: auto; }
+        .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #555;
+            border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; margin-left: auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .step-body { padding: 16px 20px; }
+        .step-body pre { white-space: pre-wrap; word-break: break-word; font-family: 'Menlo', 'Consolas', monospace;
+            font-size: 13px; line-height: 1.6; color: #d4d4d4; }
+
+        /* Q&A table */
+        .qa-table { width: 100%; border-collapse: collapse; }
+        .qa-table th { text-align: left; padding: 8px 12px; font-size: 12px; color: #888;
+            text-transform: uppercase; border-bottom: 1px solid #2a2a4a; }
+        .qa-table td { padding: 8px 12px; border-bottom: 1px solid #1f1f3a; font-size: 13px; vertical-align: top; }
+        .qa-table .q-num { color: #60a5fa; font-weight: 600; width: 30px; }
+        .qa-table .answer-yes { color: #22c55e; font-weight: 600; }
+        .qa-table .answer-no { color: #ef4444; font-weight: 600; }
+        .qa-table .answer-pending { color: #555; }
+
+        /* Bit counter */
+        .bit-counter { text-align: center; padding: 16px; margin-bottom: 16px; }
+        .bit-counter .bits { font-size: 48px; font-weight: 800; color: #2563eb; }
+        .bit-counter .bits-label { font-size: 14px; color: #888; }
+
+        .error-msg { background: #450a0a; border: 1px solid #ef4444; color: #ef4444; padding: 12px 16px;
+            border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+
+        .reset-btn { display: block; margin: 20px auto; padding: 10px 24px; border: 1px solid #2a2a4a;
+            border-radius: 8px; background: transparent; color: #888; font-size: 14px; cursor: pointer; }
+        .reset-btn:hover { border-color: #555; color: #ccc; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>10 Bits: Haiku to Opus</h1>
+    <p class="subtitle">
+        Can a small model match a large model's answer using only 10 yes/no questions (10 bits)?<br>
+        Ask a question. Haiku attempts it, asks 10 binary questions to Sonnet, then revises.
+    </p>
+
+    <div style="text-align:center; margin-bottom:24px;">
+        <img src="/qa-diagram.png" alt="QA Compression Protocol" style="max-width:100%; border-radius:8px; border:1px solid #2a2a4a;" />
+    </div>
+
+    <div id="setup">
+        <div class="key-row">
+            <label>OpenRouter Key:</label>
+            <input type="password" id="api-key" placeholder="sk-or-v1-..." />
+        </div>
+        <div class="setup-bar">
+            <textarea id="question" placeholder="Ask a question... (e.g. 'What is the sum of all prime numbers less than 50?')"></textarea>
+            <button class="go" id="go-btn" onclick="run()">Go</button>
+        </div>
+    </div>
+
+    <div id="error" class="error-msg" style="display:none;"></div>
+
+    <div id="steps" style="display:none;">
+        <!-- Step 1: Opus reference -->
+        <div class="step pending grayed" id="step1">
+            <div class="step-header">
+                <div class="step-num">1</div>
+                <div class="step-title">Sonnet Reference Answer</div>
+                <div class="step-model">anthropic/claude-sonnet-4-5</div>
+            </div>
+            <div class="step-body"><pre id="step1-content">Waiting...</pre></div>
+        </div>
+
+        <!-- Step 2: Haiku initial -->
+        <div class="step pending" id="step2">
+            <div class="step-header">
+                <div class="step-num">2</div>
+                <div class="step-title">Haiku Initial Answer</div>
+                <div class="step-model">anthropic/claude-haiku-4-5</div>
+            </div>
+            <div class="step-body"><pre id="step2-content">Waiting...</pre></div>
+        </div>
+
+        <!-- Step 3: Questions -->
+        <div class="step pending" id="step3">
+            <div class="step-header">
+                <div class="step-num">3</div>
+                <div class="step-title">Haiku Asks 10 Questions</div>
+                <div class="step-model">10 bits</div>
+            </div>
+            <div class="step-body">
+                <table class="qa-table" id="qa-table">
+                    <thead><tr><th>#</th><th>Question (Haiku)</th><th>Answer (Sonnet)</th></tr></thead>
+                    <tbody id="qa-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Bit counter -->
+        <div class="bit-counter" id="bit-counter" style="display:none;">
+            <div class="bits" id="bits-used">10</div>
+            <div class="bits-label">bits transferred</div>
+        </div>
+
+        <!-- Step 4: Haiku revised -->
+        <div class="step pending" id="step4">
+            <div class="step-header">
+                <div class="step-num">4</div>
+                <div class="step-title">Haiku Revised Answer</div>
+                <div class="step-model">incorporating 10 bits</div>
+            </div>
+            <div class="step-body"><pre id="step4-content">Waiting...</pre></div>
+        </div>
+
+        <button class="reset-btn" onclick="reset()">Start Over</button>
+    </div>
+</div>
+
+<script>
+function showError(msg) {
+    const el = document.getElementById('error');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+function clearError() { document.getElementById('error').style.display = 'none'; }
+
+function setStep(id, state, content) {
+    const el = document.getElementById(id);
+    el.className = 'step ' + state;
+    if (state === 'grayed') el.className = 'step done grayed';
+    if (content !== undefined) {
+        const pre = document.getElementById(id + '-content');
+        if (pre) pre.textContent = content;
+    }
+    // Spinner
+    const header = el.querySelector('.step-header');
+    const existing = header.querySelector('.spinner');
+    if (existing) existing.remove();
+    if (state === 'active') {
+        const sp = document.createElement('div');
+        sp.className = 'spinner';
+        header.appendChild(sp);
+    }
+}
+
+async function apiCall(endpoint, body) {
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`API error (${resp.status}): ${text}`);
+    }
+    return resp.json();
+}
+
+async function run() {
+    const apiKey = document.getElementById('api-key').value.trim();
+    const question = document.getElementById('question').value.trim();
+    if (!apiKey) { showError('Please enter your OpenRouter API key'); return; }
+    if (!question) { showError('Please enter a question'); return; }
+    clearError();
+
+    document.getElementById('go-btn').disabled = true;
+    document.getElementById('steps').style.display = 'block';
+    document.getElementById('bit-counter').style.display = 'none';
+
+    // Reset all steps
+    setStep('step1', 'pending'); setStep('step2', 'pending');
+    setStep('step3', 'pending'); setStep('step4', 'pending');
+    document.getElementById('qa-body').innerHTML = '';
+
+    const base = { api_key: apiKey, question };
+
+    try {
+        // Step 1: Opus reference (grayed out)
+        setStep('step1', 'active');
+        const r1 = await apiCall('/api/step1_opus_answer', base);
+        setStep('step1', 'grayed', r1.answer);
+
+        // Step 2: Haiku initial
+        setStep('step2', 'active');
+        const r2 = await apiCall('/api/step2_haiku_initial', base);
+        setStep('step2', 'done', r2.answer);
+
+        // Step 3: Generate questions
+        setStep('step3', 'active');
+        const r3 = await apiCall('/api/step3_generate_questions', {
+            ...base, haiku_answer: r2.answer,
+        });
+
+        // Show questions (answers pending)
+        const tbody = document.getElementById('qa-body');
+        tbody.innerHTML = '';
+        for (let i = 0; i < r3.questions.length; i++) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td class="q-num">${i+1}</td><td>${r3.questions[i]}</td><td class="answer-pending">...</td>`;
+            tbody.appendChild(tr);
+        }
+
+        // Step 3b: Answer questions
+        const r4 = await apiCall('/api/step4_answer_questions', {
+            ...base, opus_answer: r1.answer, haiku_answer: r2.answer, questions: r3.questions,
+        });
+
+        // Fill in answers
+        const rows = tbody.querySelectorAll('tr');
+        for (let i = 0; i < r4.answers.length && i < rows.length; i++) {
+            const td = rows[i].querySelector('td:last-child');
+            td.textContent = r4.answers[i] ? 'Yes' : 'No';
+            td.className = r4.answers[i] ? 'answer-yes' : 'answer-no';
+        }
+        setStep('step3', 'done');
+
+        // Bit counter
+        document.getElementById('bits-used').textContent = r3.questions.length;
+        document.getElementById('bit-counter').style.display = 'block';
+
+        // Step 4: Haiku revised
+        setStep('step4', 'active');
+        const r5 = await apiCall('/api/step5_haiku_revised', {
+            ...base, haiku_answer: r2.answer, questions: r3.questions, answers: r4.answers,
+        });
+        setStep('step4', 'done', r5.answer);
+
+        // Ungray step 1 now that everything is done
+        setStep('step1', 'done', r1.answer);
+        document.getElementById('step1').classList.remove('grayed');
+
+    } catch (e) {
+        showError(e.message);
+    }
+
+    document.getElementById('go-btn').disabled = false;
+}
+
+function reset() {
+    document.getElementById('steps').style.display = 'none';
+    document.getElementById('question').value = '';
+    clearError();
+}
+
+// Save API key to localStorage
+const keyInput = document.getElementById('api-key');
+keyInput.value = localStorage.getItem('openrouter_key') || '';
+keyInput.addEventListener('input', () => localStorage.setItem('openrouter_key', keyInput.value));
+</script>
+</body>
+</html>
