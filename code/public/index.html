@@ -142,16 +142,16 @@
         <h2>How It Works</h2>
         <p>Inspired by 20 Questions, QA compression turns model knowledge transfer into an interactive game. The small model identifies its own uncertainty, asks targeted questions, and uses the answers to self-correct. Only the binary answers travel over the wire.</p>
 
-        <p><span class="step-label">Step 1</span> <strong>Initial Attempt (Haiku)</strong><br>
+        <p><span class="step-label">Step 1</span> <strong>Initial Attempt (Small Model)</strong><br>
         The small model attempts to solve the problem on its own, producing an initial answer that may contain errors or gaps.</p>
 
-        <p><span class="step-label">Step 2</span> <strong>Generate Questions (Haiku)</strong><br>
+        <p><span class="step-label">Step 2</span> <strong>Generate Questions (Small Model)</strong><br>
         The small model examines its own solution and formulates targeted yes/no questions about it: <em>"Is my approach to step 3 correct?"</em>, <em>"Did I apply the tax rate to the right subtotal?"</em></p>
 
-        <p><span class="step-label">Step 3</span> <strong>Binary Answers (Opus)</strong><br>
+        <p><span class="step-label">Step 3</span> <strong>Binary Answers (Large Model)</strong><br>
         The large model answers each question with a single yes or no. Each response is exactly 1 bit of information. 10 questions = 10 bits total.</p>
 
-        <p><span class="step-label">Step 4</span> <strong>Revised Answer (Haiku)</strong><br>
+        <p><span class="step-label">Step 4</span> <strong>Revised Answer (Small Model)</strong><br>
         The small model incorporates all 10 answers and produces a revised solution. Because the questions are deterministic given the initial response, only the 10-bit answer string needs to be transmitted.</p>
 
         <div class="insight">
@@ -169,7 +169,7 @@
             <input type="password" id="api-key" placeholder="sk-or-v1-... (optional — a demo key is provided)" />
         </div>
         <p class="key-note" id="key-note">Your key is stored only in your browser's local storage. We do not store or log your API key or queries on the server &mdash; it is passed through to OpenRouter and discarded.</p>
-        <p class="key-note" id="courtesy-note" style="display:none; color:#64748b;">
+        <p class="key-note" id="courtesy-note" style="display:none; color:#e11d48;">
             A courtesy demo key with a small budget is available so you can try it without signing up. Please use your own <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style="color:#2563eb;">OpenRouter key</a> for repeated use.
         </p>
 
