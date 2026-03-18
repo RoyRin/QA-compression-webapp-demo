@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>QA Compression Demo</title>
+    <title>Question-Asking Compression</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,11 +22,18 @@
         h1 { font-size: 32px; color: #0f172a; margin-bottom: 4px; }
         .subtitle { color: #64748b; font-size: 15px; margin-bottom: 24px; line-height: 1.5; }
 
-        .explainer { background: #ffffff; border: 1px solid #c7d2e0; border-radius: 10px; padding: 20px;
+        .explainer { background: #ffffff; border: 1px solid #c7d2e0; border-radius: 10px; padding: 24px;
             margin-bottom: 24px; line-height: 1.7; font-size: 14px; color: #475569; }
+        .explainer h2 { font-size: 18px; color: #0f172a; margin-bottom: 8px; }
+        .explainer p { margin-bottom: 14px; }
+        .explainer p:last-child { margin-bottom: 0; }
         .explainer strong { color: #1e293b; }
         .explainer a { color: #2563eb; text-decoration: none; }
         .explainer a:hover { text-decoration: underline; }
+        .explainer .step-label { display: inline-block; background: #edf2fb; color: #2563eb; font-weight: 700;
+            font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
+        .explainer .insight { background: #f0f7ff; border-left: 3px solid #2563eb; padding: 12px 16px;
+            border-radius: 0 8px 8px 0; margin-top: 4px; font-size: 13px; color: #334155; }
 
         .setup-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
         .setup-bar input, .setup-bar textarea { flex: 1; min-width: 200px; padding: 12px; border: 1px solid #c7d2e0;
@@ -108,20 +115,34 @@
         </a>
     </nav>
 
-    <h1>QA Compression Demo</h1>
+    <h1>Question-Asking Compression</h1>
     <p class="subtitle">
         Can a small model match a large model's answer using only 10 yes/no questions (10 bits)?
     </p>
 
     <div class="explainer">
-        <strong>How it works:</strong> QA compression is a technique where a small model (Haiku) attempts a question,
-        then generates binary yes/no questions about its answer. A large model (Opus) answers those questions,
-        transferring exactly 10 bits of information. The small model then revises its answer using that guidance.
-        This demonstrates that a surprisingly small amount of targeted information can bridge the quality gap between models.
+        <h2>How It Works</h2>
+        <p>Inspired by 20 Questions, QA compression turns model knowledge transfer into an interactive game. The small model identifies its own uncertainty, asks targeted questions, and uses the answers to self-correct. Only the binary answers travel over the wire.</p>
+
+        <p><span class="step-label">Step 1</span> <strong>Initial Attempt (Haiku)</strong><br>
+        The small model attempts to solve the problem on its own, producing an initial answer that may contain errors or gaps.</p>
+
+        <p><span class="step-label">Step 2</span> <strong>Generate Questions (Haiku)</strong><br>
+        The small model examines its own solution and formulates targeted yes/no questions about it: <em>"Is my approach to step 3 correct?"</em>, <em>"Did I apply the tax rate to the right subtotal?"</em></p>
+
+        <p><span class="step-label">Step 3</span> <strong>Binary Answers (Opus)</strong><br>
+        The large model answers each question with a single yes or no. Each response is exactly 1 bit of information. 10 questions = 10 bits total.</p>
+
+        <p><span class="step-label">Step 4</span> <strong>Revised Answer (Haiku)</strong><br>
+        The small model incorporates all 10 answers and produces a revised solution. Because the questions are deterministic given the initial response, only the 10-bit answer string needs to be transmitted.</p>
+
+        <div class="insight">
+            <strong>Key insight:</strong> The receiver reconstructs the full question-answer transcript by running an identical SLM locally. The communication cost is exactly N bits, independent of response length. The LLM does not even need to receive the questions, as it can perfectly simulate the SLM to generate them itself.
+        </div>
     </div>
 
     <div style="text-align:center; margin-bottom:24px;">
-        <img src="/qa-diagram.png" alt="QA Compression Protocol" style="max-width:100%; border-radius:8px; border:1px solid #2a2a4a;" />
+        <img src="/qa-diagram.png" alt="QA Compression Protocol" style="max-width:100%; border-radius:8px; border:1px solid #c7d2e0;" />
     </div>
 
     <div id="setup">
