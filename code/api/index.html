@@ -50,6 +50,24 @@
         .key-row label { color: #64748b; font-size: 13px; white-space: nowrap; }
         .key-note { font-size: 12px; color: #94a3b8; margin-bottom: 14px; padding-left: 2px; }
 
+        /* Model selectors */
+        .model-config { background: #ffffff; border: 1px solid #c7d2e0; border-radius: 10px; padding: 16px 20px;
+            margin-bottom: 18px; }
+        .model-config summary { font-size: 14px; font-weight: 600; color: #334155; cursor: pointer;
+            list-style: none; display: flex; align-items: center; gap: 8px; }
+        .model-config summary::-webkit-details-marker { display: none; }
+        .model-config summary::before { content: '\25B6'; font-size: 10px; color: #94a3b8; transition: transform 0.2s; }
+        .model-config[open] summary::before { transform: rotate(90deg); }
+        .model-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+        .model-field label { display: block; font-size: 12px; font-weight: 600; color: #64748b;
+            text-transform: uppercase; margin-bottom: 4px; }
+        .model-field select { width: 100%; padding: 8px 10px; border: 1px solid #c7d2e0; border-radius: 6px;
+            background: #f8fafc; color: #1e293b; font-size: 13px; font-family: inherit; }
+        .model-field select:disabled { background: #e2e8f0; color: #94a3b8; }
+        .link-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+        .link-row input[type="checkbox"] { accent-color: #2563eb; }
+        .link-row label { font-size: 13px; color: #64748b; cursor: pointer; }
+
         /* Steps */
         .step { background: #ffffff; border: 1px solid #c7d2e0; border-radius: 10px; margin-bottom: 16px;
             overflow: hidden; transition: opacity 0.3s; }
@@ -151,6 +169,47 @@
             <input type="password" id="api-key" placeholder="sk-or-v1-..." />
         </div>
         <p class="key-note">Your key is stored only in your browser's local storage. We do not store or log your API key or queries on the server &mdash; it is passed through to OpenRouter and discarded.</p>
+
+        <details class="model-config" id="model-config">
+            <summary>Model Configuration</summary>
+            <div class="model-grid">
+                <div class="model-field">
+                    <label>Small Model</label>
+                    <select id="small-model">
+                        <option value="anthropic/claude-3.5-haiku">Haiku 3.5</option>
+                        <option value="anthropic/claude-haiku-4.5" selected>Haiku 4.5</option>
+                        <option value="anthropic/claude-3.5-sonnet">Sonnet 3.5</option>
+                        <option value="anthropic/claude-sonnet-4.6">Sonnet 4.6</option>
+                        <option value="anthropic/claude-opus-4.6">Opus 4.6</option>
+                    </select>
+                </div>
+                <div class="model-field">
+                    <label>Question Asker</label>
+                    <select id="questioner-model" disabled>
+                        <option value="anthropic/claude-3.5-haiku">Haiku 3.5</option>
+                        <option value="anthropic/claude-haiku-4.5" selected>Haiku 4.5</option>
+                        <option value="anthropic/claude-3.5-sonnet">Sonnet 3.5</option>
+                        <option value="anthropic/claude-sonnet-4.6">Sonnet 4.6</option>
+                        <option value="anthropic/claude-opus-4.6">Opus 4.6</option>
+                    </select>
+                </div>
+                <div class="model-field">
+                    <label>Large Model</label>
+                    <select id="large-model">
+                        <option value="anthropic/claude-3.5-haiku">Haiku 3.5</option>
+                        <option value="anthropic/claude-haiku-4.5">Haiku 4.5</option>
+                        <option value="anthropic/claude-3.5-sonnet">Sonnet 3.5</option>
+                        <option value="anthropic/claude-sonnet-4.6">Sonnet 4.6</option>
+                        <option value="anthropic/claude-opus-4.6" selected>Opus 4.6</option>
+                    </select>
+                </div>
+                <div class="link-row">
+                    <input type="checkbox" id="link-questioner" checked />
+                    <label for="link-questioner">Question asker uses same model as small model</label>
+                </div>
+            </div>
+        </details>
+
         <div class="setup-bar">
             <textarea id="question" placeholder="Ask a question... (e.g. 'What is the sum of all prime numbers less than 50?')"></textarea>
             <button class="go" id="go-btn" onclick="run()">Go</button>
@@ -286,15 +345,33 @@ async function run() {
     document.getElementById('judgment').style.display = 'none';
     document.getElementById('judgment2').style.display = 'none';
 
-    const base = { api_key: apiKey, question };
+    const smallModel = document.getElementById('small-model').value;
+    const questionerModel = document.getElementById('link-questioner').checked
+        ? smallModel : document.getElementById('questioner-model').value;
+    const largeModel = document.getElementById('large-model').value;
+
+    const base = { api_key: apiKey, question, small_model: smallModel,
+        questioner_model: questionerModel, large_model: largeModel };
+
+    // Update step headers to reflect chosen models
+    const smallLabel = document.getElementById('small-model').selectedOptions[0].text;
+    const questionerLabel = document.getElementById('link-questioner').checked
+        ? smallLabel : document.getElementById('questioner-model').selectedOptions[0].text;
+    const largeLabel = document.getElementById('large-model').selectedOptions[0].text;
+    document.querySelector('#step1 .step-model').textContent = largeModel;
+    document.querySelector('#step1 .step-title').textContent = largeLabel + ' Reference Answer';
+    document.querySelector('#step2 .step-model').textContent = smallModel;
+    document.querySelector('#step2 .step-title').textContent = smallLabel + ' Initial Answer';
+    document.querySelector('#step3 .step-title').textContent = questionerLabel + ' Asks 10 Questions';
+    document.querySelector('#step4 .step-title').textContent = smallLabel + ' Revised Answer';
 
     try {
-        // Step 1: Opus reference (grayed out)
+        // Step 1: Large model reference (grayed out)
         setStep('step1', 'active');
         const r1 = await apiCall('/api/step1_opus_answer', base);
         setStep('step1', 'grayed', r1.answer);
 
-        // Step 2: Haiku initial
+        // Step 2: Small model initial
         setStep('step2', 'active');
         const r2 = await apiCall('/api/step2_haiku_initial', base);
         setStep('step2', 'done', r2.answer);
@@ -308,8 +385,8 @@ async function run() {
         jEl.className = 'judgment ' + (judge.correct ? 'correct' : 'incorrect');
         document.getElementById('judgment-icon').textContent = judge.correct ? '\u2713' : '\u2717';
         document.getElementById('judgment-text').textContent = judge.correct
-            ? 'Haiku got it right! Let\'s see if 10 bits can still help.'
-            : 'Haiku got it wrong. Can 10 bits fix it?';
+            ? smallLabel + ' got it right! Let\'s see if 10 bits can still help.'
+            : smallLabel + ' got it wrong. Can 10 bits fix it?';
 
         // Step 3: Generate questions
         setStep('step3', 'active');
@@ -392,6 +469,23 @@ function reset() {
 const keyInput = document.getElementById('api-key');
 keyInput.value = localStorage.getItem('openrouter_key') || '';
 keyInput.addEventListener('input', () => localStorage.setItem('openrouter_key', keyInput.value));
+
+// Model selector linking
+const smallSel = document.getElementById('small-model');
+const questionerSel = document.getElementById('questioner-model');
+const linkCb = document.getElementById('link-questioner');
+
+function syncQuestioner() {
+    if (linkCb.checked) {
+        questionerSel.value = smallSel.value;
+        questionerSel.disabled = true;
+    } else {
+        questionerSel.disabled = false;
+    }
+}
+smallSel.addEventListener('change', syncQuestioner);
+linkCb.addEventListener('change', syncQuestioner);
+syncQuestioner();
 </script>
 </body>
 </html>

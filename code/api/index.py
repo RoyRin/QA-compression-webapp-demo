@@ -5,11 +5,19 @@ from flask import Flask, send_file, jsonify, request
 
 app = Flask(__name__)
 
-# OpenRouter model IDs
-SMALL_MODEL = "anthropic/claude-haiku-4.5"
-LARGE_MODEL = "anthropic/claude-opus-4.5"
-
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# Allowed model IDs (whitelist to prevent abuse)
+ALLOWED_MODELS = {
+    "anthropic/claude-3.5-haiku",
+    "anthropic/claude-haiku-4.5",
+    "anthropic/claude-3.5-sonnet",
+    "anthropic/claude-sonnet-4.6",
+    "anthropic/claude-opus-4.6",
+}
+
+DEFAULT_SMALL = "anthropic/claude-haiku-4.5"
+DEFAULT_LARGE = "anthropic/claude-opus-4.6"
 
 
 class APIError(Exception):
@@ -57,6 +65,14 @@ def call_model(api_key, model, messages, temperature=0.0, max_tokens=4000):
     return data["choices"][0]["message"]["content"]
 
 
+def get_model(data, key, default):
+    """Get a model ID from request data, falling back to default if missing/invalid."""
+    model = data.get(key, default)
+    if model not in ALLOWED_MODELS:
+        raise APIError(f"Model '{model}' is not allowed.", 400)
+    return model
+
+
 def format_qa_transcript(questions, answers):
     """Format Q&A pairs for inclusion in prompts."""
     lines = []
@@ -79,25 +95,27 @@ def diagram():
 
 @app.route("/api/step1_opus_answer", methods=["POST"])
 def step1_opus_answer():
-    """Step 1: Opus answers the question (reference answer)."""
+    """Step 1: Large model answers the question (reference answer)."""
     data = request.json
     api_key = data["api_key"]
     question = data["question"]
+    large_model = get_model(data, "large_model", DEFAULT_LARGE)
 
     messages = [{"role": "user", "content": question}]
-    answer = call_model(api_key, LARGE_MODEL, messages)
+    answer = call_model(api_key, large_model, messages)
     return jsonify({"answer": answer})
 
 
 @app.route("/api/step2_haiku_initial", methods=["POST"])
 def step2_haiku_initial():
-    """Step 2: Haiku answers the question (initial attempt)."""
+    """Step 2: Small model answers the question (initial attempt)."""
     data = request.json
     api_key = data["api_key"]
     question = data["question"]
+    small_model = get_model(data, "small_model", DEFAULT_SMALL)
 
     messages = [{"role": "user", "content": question}]
-    answer = call_model(api_key, SMALL_MODEL, messages)
+    answer = call_model(api_key, small_model, messages)
     return jsonify({"answer": answer})
 
 
@@ -122,8 +140,9 @@ Is the answer to evaluate essentially correct? Consider whether it reaches the s
 
 Respond with ONLY "correct" or "incorrect" on the first line, then a brief one-sentence explanation."""
 
+    large_model = get_model(data, "large_model", DEFAULT_LARGE)
     messages = [{"role": "user", "content": prompt}]
-    resp = call_model(api_key, LARGE_MODEL, messages, max_tokens=200)
+    resp = call_model(api_key, large_model, messages, max_tokens=200)
 
     is_correct = "correct" in resp.strip().split("\n")[0].lower() and "incorrect" not in resp.strip().split("\n")[0].lower()
     explanation = resp.strip().split("\n")[-1] if "\n" in resp.strip() else resp.strip()
@@ -138,6 +157,7 @@ def step3_generate_questions():
     api_key = data["api_key"]
     question = data["question"]
     haiku_answer = data["haiku_answer"]
+    questioner_model = get_model(data, "questioner_model", DEFAULT_SMALL)
 
     prompt = f"""You are a small language model trying to answer a prompt. The original prompt is: {question}
 Your current answer is: {haiku_answer}
@@ -158,7 +178,7 @@ Format your response as a numbered list:
 Return ONLY the numbered list, nothing else."""
 
     messages = [{"role": "user", "content": prompt}]
-    resp = call_model(api_key, SMALL_MODEL, messages, max_tokens=2000)
+    resp = call_model(api_key, questioner_model, messages, max_tokens=2000)
 
     # Parse numbered list
     import re
@@ -186,6 +206,7 @@ def step4_answer_questions():
     opus_answer = data["opus_answer"]
     haiku_answer = data["haiku_answer"]
     questions = data["questions"]
+    large_model = get_model(data, "large_model", DEFAULT_LARGE)
 
     questions_text = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
 
@@ -208,7 +229,7 @@ Format your response as:
 Return ONLY the numbered list of Yes/No answers, nothing else."""
 
     messages = [{"role": "user", "content": prompt}]
-    resp = call_model(api_key, LARGE_MODEL, messages, max_tokens=500)
+    resp = call_model(api_key, large_model, messages, max_tokens=500)
 
     # Parse answers
     import re
@@ -236,6 +257,7 @@ def step5_haiku_revised():
     haiku_answer = data["haiku_answer"]
     questions = data["questions"]
     answers = data["answers"]
+    small_model = get_model(data, "small_model", DEFAULT_SMALL)
 
     qa_transcript = format_qa_transcript(questions, answers)
 
@@ -249,5 +271,5 @@ Additional information to incorporate:
 Provide an improved answer that incorporates all the above information, without any preamble or acknowledgment. Answer the original question directly."""
 
     messages = [{"role": "user", "content": prompt}]
-    answer = call_model(api_key, SMALL_MODEL, messages)
+    answer = call_model(api_key, small_model, messages)
     return jsonify({"answer": answer})
