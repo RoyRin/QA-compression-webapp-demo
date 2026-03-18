@@ -32,6 +32,11 @@ def handle_api_error(e):
     return jsonify({"error": e.message}), e.status_code
 
 
+@app.errorhandler(Exception)
+def handle_generic_error(e):
+    return jsonify({"error": f"Internal error: {type(e).__name__}: {e}"}), 500
+
+
 def call_model(api_key, model, messages, temperature=0.0, max_tokens=4000):
     """Call a model via OpenRouter."""
     headers = {
@@ -71,8 +76,9 @@ def get_api_key(data):
     key = (data.get("api_key") or "").strip()
     if key:
         return key
-    if DEFAULT_API_KEY:
-        return DEFAULT_API_KEY
+    default = os.environ.get("OPENROUTER_DEFAULT_KEY", "").strip()
+    if default:
+        return default
     raise APIError("Please enter your OpenRouter API key.", 400)
 
 
@@ -107,7 +113,7 @@ def diagram():
 @app.route("/api/has_default_key", methods=["GET"])
 def has_default_key():
     """Check if a default API key is configured (without exposing it)."""
-    return jsonify({"available": bool(DEFAULT_API_KEY)})
+    return jsonify({"available": bool(os.environ.get("OPENROUTER_DEFAULT_KEY", ""))})
 
 
 @app.route("/api/step1_opus_answer", methods=["POST"])
