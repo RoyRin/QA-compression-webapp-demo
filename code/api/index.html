@@ -1,15 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>10 Bits: Haiku to Opus</title>
+    <title>QA Compression Demo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; }
         .container { max-width: 900px; margin: 0 auto; padding: 20px; }
 
+        /* Navigation tabs */
+        .nav { display: flex; align-items: center; gap: 0; margin-bottom: 28px; border-bottom: 1px solid #2a2a4a; }
+        .nav a { padding: 12px 20px; font-size: 14px; font-weight: 600; color: #888; text-decoration: none;
+            border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s; }
+        .nav a:hover { color: #ccc; }
+        .nav a.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .nav .nav-spacer { flex: 1; }
+        .nav .gh-link { padding: 12px 16px; color: #888; transition: color 0.2s; display: flex; align-items: center; }
+        .nav .gh-link:hover { color: #ccc; }
+        .nav .gh-link svg { width: 20px; height: 20px; fill: currentColor; }
+
         h1 { font-size: 32px; color: #fff; margin-bottom: 4px; }
         .subtitle { color: #888; font-size: 15px; margin-bottom: 24px; line-height: 1.5; }
+
+        .explainer { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 20px;
+            margin-bottom: 24px; line-height: 1.7; font-size: 14px; color: #bbb; }
+        .explainer strong { color: #e0e0e0; }
+        .explainer a { color: #60a5fa; text-decoration: none; }
+        .explainer a:hover { text-decoration: underline; }
 
         .setup-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
         .setup-bar input, .setup-bar textarea { flex: 1; min-width: 200px; padding: 12px; border: 1px solid #2a2a4a;
@@ -21,9 +38,10 @@
         button.go:hover { background: #1d4ed8; }
         button.go:disabled { background: #333; cursor: not-allowed; }
 
-        .key-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+        .key-row { display: flex; gap: 12px; margin-bottom: 6px; align-items: center; }
         .key-row input { flex: 1; }
         .key-row label { color: #888; font-size: 13px; white-space: nowrap; }
+        .key-note { font-size: 12px; color: #666; margin-bottom: 14px; padding-left: 2px; }
 
         /* Steps */
         .step { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; margin-bottom: 16px;
@@ -80,11 +98,27 @@
 </head>
 <body>
 <div class="container">
-    <h1>10 Bits: Haiku to Opus</h1>
+    <nav class="nav">
+        <a class="active" href="#">Demo</a>
+        <a href="https://royrinberg.com/assets/papers/compression_powered_egress_limiting.pdf" target="_blank" rel="noopener">Paper</a>
+        <a href="https://www.lesswrong.com/posts/GcbkprYPCjXdysLq4/text-compression-can-be-used-to-help-secure-model-weights" target="_blank" rel="noopener">Blog</a>
+        <span class="nav-spacer"></span>
+        <a class="gh-link" href="https://github.com/RoyRin/QA-compression-webapp-demo" target="_blank" rel="noopener" title="View on GitHub">
+            <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </a>
+    </nav>
+
+    <h1>QA Compression Demo</h1>
     <p class="subtitle">
-        Can a small model match a large model's answer using only 10 yes/no questions (10 bits)?<br>
-        Ask a question. Haiku attempts it, asks 10 binary questions to Opus, then revises.
+        Can a small model match a large model's answer using only 10 yes/no questions (10 bits)?
     </p>
+
+    <div class="explainer">
+        <strong>How it works:</strong> QA compression is a technique where a small model (Haiku) attempts a question,
+        then generates binary yes/no questions about its answer. A large model (Opus) answers those questions,
+        transferring exactly 10 bits of information. The small model then revises its answer using that guidance.
+        This demonstrates that a surprisingly small amount of targeted information can bridge the quality gap between models.
+    </div>
 
     <div style="text-align:center; margin-bottom:24px;">
         <img src="/qa-diagram.png" alt="QA Compression Protocol" style="max-width:100%; border-radius:8px; border:1px solid #2a2a4a;" />
@@ -95,6 +129,7 @@
             <label>OpenRouter Key:</label>
             <input type="password" id="api-key" placeholder="sk-or-v1-..." />
         </div>
+        <p class="key-note">Your key is stored only in your browser's local storage. We do not store or log your API key or queries on the server &mdash; it is passed through to OpenRouter and discarded.</p>
         <div class="setup-bar">
             <textarea id="question" placeholder="Ask a question... (e.g. 'What is the sum of all prime numbers less than 50?')"></textarea>
             <button class="go" id="go-btn" onclick="run()">Go</button>
